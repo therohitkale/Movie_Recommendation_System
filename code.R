@@ -34,39 +34,24 @@ rm(dl, ratings, movies, test_index, temp, movielens, removed)
 
 ###############################
 # create the train set and test set
-###############################
-# Here, we split the 'edx' set in 2 parts: the training set and the test set. 
-# The model building is done in the training set, and the test set is used
-# to test the model. When the model is complete, we use the 'validation' set
-# to calculate the final RMSE.
-# We use the same procedure used to create 'edx' and 'validation' sets.
-#
-# Test set will be 10% of 'edx' data
 
 set.seed(1234, sample.kind="Rounding")
 test_index <- createDataPartition(y = edx$rating, times = 1, p = 0.1, list = FALSE)
 train_set <- edx[-test_index,]
 temp <- edx[test_index,]
 
-# Make sure userId and movieId in test set are also in train set
 
 test_set <- temp %>% 
   semi_join(train_set, by = "movieId") %>%
   semi_join(train_set, by = "userId")
 
-# Add rows removed from test set back into train set
+# Adding rows removed from test set back into train set
 
 removed <- anti_join(temp, test_set)
 train_set <- rbind(train_set, removed)
 
 rm(test_index, temp, removed)
 
-################################
-# Data exploration
-################################
-# Before creating the model, we need to understand
-# the features of the rating data set.
-# This step will help build a better model.
 
 # Structure of the data set
 str(edx)
@@ -77,28 +62,12 @@ dim(edx)
 # View the content of 'edx' dataset
 head(edx)
 
-# From this initial exploration, we discover that 'edx' has 6 columns:
-# movieId: integer
-# userId : integer
-# rating: numeric
-# timestamp: numeric
-# title: character
-# genres: character
-# 
-
-#-----------------
-# Genres exploration
-#-----------------
-# Now let's check the "genres" column.
-# There are 797 combinations of genres:
 length(unique(edx$genres))
 
-# View the first 6 genres
 edx %>% group_by(genres) %>% 
   summarise(n=n()) %>%
   head()
 
-# Several movies are classified in more than one genre.
 # Count the number of different genres for each movie
 tibble(cnt = str_count(train_set$genres, fixed("|")), 
        genres = train_set$genres) %>% 
@@ -107,46 +76,18 @@ tibble(cnt = str_count(train_set$genres, fixed("|")),
   arrange(-cnt) %>% 
   head()
 
-# Create a vector of unique genres 
-# DON'T RUN: this code takes long time to run
-#res <- tibble(genre = parse_guess(str_split(edx$genres[1], "\\|", simplify = TRUE)))
-#for(x in 2:length(edx$genres)){
-#  res <- bind_rows(res, tibble(genre = parse_guess(str_split(edx$genres[1], "\\|", simplify = TRUE)))) %>% distinct()
-#}
-
-# The dataset is very large and the data is
-# stored in a data frame. First, let's transform
-# this data to matrix and perform  dimension
-# reduction 
-#train <- as.matrix(edx)
-#test  <- as.matrix(validation)
-#head(edx)
-
-# Separate the predictors and outcomes.
-# In this case, "y" is the "rating" column 
-#foo <- list(x = (edx[,-3]), rating = edx[,3])
-#class(foo$x)
-
-#edx %>% group_by(movieId) %>% summarize(n=n()) %>% count()
-#edx %>% group_by(title) %>% summarize(n=n()) %>% count()
-#edx %>% distinct(movieId) %>% count()
-#edx %>% distinct(title) %>% count()
 length(unique(edx$rating))
 
 
-#-----------------
-# Date explorationg
-#-----------------
 # Convert timestamp into date format
 library(lubridate)
 edx <- mutate(edx, date = as_datetime(timestamp))
 
-# Check the range period of ratings
 tibble(`Initial Date` = date(as_datetime(min(edx$timestamp), origin="1970-01-01")),
        `Final Date` = date(as_datetime(max(edx$timestamp), origin="1970-01-01"))) %>%
   mutate(Period = duration(max(edx$timestamp)-min(edx$timestamp)))
 
-# Plot histogram of rating distribution over the years
+# Plotting histogram of rating distribution over the years
 if(!require(ggthemes))
   install.packages("ggthemes", repos = "http://cran.us.r-project.org")
 if(!require(scales))
@@ -167,10 +108,7 @@ edx %>% mutate(date = date(as_datetime(timestamp, origin="1970-01-01"))) %>%
   arrange(-count) %>%
   head(10)
 
-#-----------------
-# Ratings explorationg
-#-----------------
-# Count the number of all ratings:
+
 edx %>% group_by(rating) %>% summarize(n=n())
 
 # Chart with distribution of each rating
@@ -186,9 +124,6 @@ edx %>% group_by(rating) %>%
   ylab("Count") +
   theme_economist()
 
-#-----------------
-# Movies exploration
-#-----------------
 # How many different movies are in the 'edx' set?
 length(unique(edx$movieId))
 
@@ -200,16 +135,12 @@ edx %>% group_by(movieId) %>%
   scale_x_log10() + 
   ggtitle("Movies")
 
-#-----------------
 # Users exploration
-#-----------------
-# Distribution of users
 edx %>% group_by(userId) %>%
   summarise(n=n()) %>%
   arrange(n) %>%
   head()
 
-# How many different users are in the 'edx' set?
 length(unique(edx$userId))
 
 # Distribution of users rating movies (historgram)
@@ -220,7 +151,7 @@ edx %>% group_by(userId) %>%
   scale_x_log10() + 
   ggtitle("Users")
 
-# Show the heat map of users x movies
+# Showing the heat map of users x movies
 users <- sample(unique(edx$userId), 100)
 edx %>% filter(userId %in% users) %>%
   select(userId, movieId, rating) %>%
@@ -231,39 +162,20 @@ edx %>% filter(userId %in% users) %>%
   image(1:100, 1:100,. , xlab="Movies", ylab="Users")
 abline(h=0:100+0.5, v=0:100+0.5, col = "grey")
 
-################################
 ##  Data Cleaning
-################################
-# This step is optional. Remove genres and timestamp, since 
-# we'll not use them.
 train_set <- train_set %>% select(userId, movieId, rating, title)
 test_set <- test_set %>% select(userId, movieId, rating, title)
 
-################################
-# Define RMSE, MSE and MAE
-################################
-# Root Mean Squared Error (RMSE) is the indicator used to
-# compare the predicted value with the actual outcome.
-# During the model development, we use the test set to
-# predict the outcome. When the model is ready, then we
-# use the 'validation' set.
 
-# Define Mean Absolute Error (MAE)
 MAE <- function(true_ratings, predicted_ratings){
   mean(abs(true_ratings - predicted_ratings))
 }
-# Define Mean Squared Error (MSE)
 MSE <- function(true_ratings, predicted_ratings){
   mean((true_ratings - predicted_ratings)^2)
 }
-# Define Root Mean Squared Error (RMSE)
 RMSE <- function(true_ratings, predicted_ratings){
   sqrt(mean((true_ratings - predicted_ratings)^2))
 }
-
-################################
-# Random Prediction
-################################
 set.seed(4321, sample.kind = "Rounding")
 # Create the probability of each rating
 p <- function(x, y) mean(y == x)
@@ -288,35 +200,17 @@ result <- bind_rows(result,
 # Show the RMSE improvement
 result %>% knitr::kable()
 
-################################
-# Linear Model
-################################
-# 
-# https://rafalab.github.io/dsbook/large-datasets.html#recommendation-systems
-# We're building the linear model based on the formula:
-# y_hat = mu + bi + bu + epsilon u,i
-
-#-------------------------
 # 1. Predict the same rating for all movies.
-#-------------------------
-# The initial prediction is the mean of the ratings (mu).
-# y_hat = mu
-# Mean of observed values
 mu <- mean(train_set$rating)
-# Update the error table
+
+               # Update the error table
 result <- bind_rows(result,
                     tibble(Method = "Mean",
                            RMSE = RMSE(test_set$rating, mu),
                            MSE = MSE(test_set$rating, mu),
                            MAE = MAE(test_set$rating, mu)))
-# Show the RMSE improvement
 result %>% knitr::kable()
 
-#-------------------------
-# 2. Include movie effect (bi)
-#-------------------------
-# bi is the movie effect (bias) for movie i.
-# y_hat = mu + bi
 # Movie effects (bi)
 bi <- train_set %>%
   group_by(movieId) %>%
@@ -344,12 +238,7 @@ result <- bind_rows(result,
 # Show the RMSE improvement
 result %>% knitr::kable()
 
-#-------------------------
-# 3. Include user effect (bu)
-#-------------------------
-# bu is the user effect (bias) for user u.
-# y_hat = mu + bi + bu
-# User effect (bu)
+
 bu <- train_set %>%
   left_join(bi, by = 'movieId') %>%
   group_by(userId) %>%
@@ -382,14 +271,7 @@ train_set %>%
   scale_y_continuous(labels = comma) +
   theme_economist()
 
-################################
-# Checking the model result
-################################
-# The RMSE improved from the initial estimation based 
-# on the mean. However, we still need to check if
-# the model makes good ratings predictions.
-#
-# Check the 10 largest residual differences
+
 train_set %>% 
   left_join(bi, by='movieId') %>%
   mutate(residual = rating - (mu + b_i)) %>%
@@ -430,21 +312,7 @@ train_set %>% count(movieId) %>%
   slice(1:10) %>% 
   pull(n)
 
-################################
-# Regularization
-################################
-# The linear model provided a good estimation for
-# the ratings. We can improve the prediction if 
-# we penalize the movies with few number of ratings.
-# We do this adding a value, let's call lambda, to 
-# the number of ratings. 
-#
-# Small values of lambda have large effect on small
-# sample sizes and almost no impact for movies with
-# many ratings, while large lambdas can drastically 
-# reduce the impact of movies with few ratings.
-#
-# Here, we find the lambda that provides the optimal  
+
 # prediction, i.e. that results in the lowest RMSE.
 regularization <- function(lambda, trainset, testset){
   # Mean
@@ -487,9 +355,7 @@ tibble(Lambda = lambdas, RMSE = rmses) %>%
 lambda <- lambdas[which.min(rmses)]
 lambda
 
-# Then, we calculate the predicted rating using the
-# best parameters achieved from regularization.
-# achieved from regularization.
+
 mu <- mean(train_set$rating)
 # Movie effect (bi)
 b_i <- train_set %>%
@@ -516,18 +382,7 @@ result <- bind_rows(result,
 result %>% knitr::kable()
 
 
-################################
-# Matrix Factorization with recosystem
-################################
-# recosystem is a package for recommendation system
-# using Matrix Factorization. High performance multi-core
-# parallel computing is supported in this package.
-#
-# Reference Manual:
-# https://cran.r-project.org/web/packages/recosystem/recosystem.pdf
-#
-# Vignette:
-# https://cran.r-project.org/web/packages/recosystem/vignettes/introduction.html
+
 if(!require(recosystem))
   install.packages("recosystem", repos = "http://cran.us.r-project.org")
 set.seed(123, sample.kind = "Rounding") # This is a randomized algorithm
@@ -554,19 +409,7 @@ r$train(train_data, opts = c(opts$min, nthread = 4, niter = 20))
 y_hat_reco <- r$predict(test_data, out_memory())
 head(y_hat_reco, 10)
 
-################################
-# Testing recommenderlab
-################################
-# The recommenderlab package "provides a research infrastructure 
-# to test and develop recommender algorithms including UBCF,
-# IBCF, FunkSVD and association rule-based algorithms."
-# For detailed information, access these documents.
-#
-# Reference manual:
-# https://cran.r-project.org/web/packages/recommenderlab/recommenderlab.pdf
-#
-# recommenderlab vignette:
-# https://cran.r-project.org/web/packages/recommenderlab/vignettes/recommenderlab.pdf
+
 
 if(!require(recommenderlab)) install.packages("recommenderlab", repos = "http://cran.us.r-project.org")
 head(as(Jester5k, "data.frame"))
@@ -583,10 +426,7 @@ getModel(r)$topN
 recom <- recommenderlab::predict(r, train_s[62891:69878], type="ratings")
 y_hat_reclab <- as(recom, "data.frame")
 
-# Evaluation of predicted ratings
-# Split the data with 90% for training and 10% for testing.
-# We assume that ratings equal to or more than 4 are good
-# and should be recommended to the user.
+
 set.seed(123, sample.kind="Rounding")
 
 # The recommenderlab test is incomplete.
@@ -612,46 +452,29 @@ error <- rbind(
   IBCF = calcPredictionAccuracy(p2, getData(e, "unknown"))
 )
 error
-################################
+
+               
+               
 # Testing other ML algorithms
-################################
-# Maybe we can improve RMSE adding other ML algorithms.
-# The idea is to run some algorithms and join them
-# using ensemble technique.
-#
-#------------------
 # 1. Train KNN
-#------------------
-# Unable to train KNN. This code returns an error
-# Error: cannot allocate vector of size 692.5 Gb
 fit <- train(rating ~ .,
              method = "knn", 
              tuneGrid = data.frame(k = seq(1, 15, 2)), 
              data = train_set)
 
-#------------------
-# 2. Train random forest
-#------------------
-# Unable to train RF. This code returns an error
-# Error: cannot allocate vector of size 692.5 Gb
 fit <- train(rating ~ .,
              method = "rf", 
              tuneGrid = data.frame(k = seq(1, 15, 2)), 
              data = train_set)
-#------------------
-# 3. Use just random forest
-#------------------
-# Unable to use Random forest. This code returns an error
-# Error: cannot allocate vector of size 30.2 Gb
-library(randomForest)
+
+               
+               
+ # 3. Use just random forest
+
+               library(randomForest)
 train_rf <- randomForest(rating ~ ., data = train_set)
 
-#------------------
-# 4. Use regression trees (rpart)
-#------------------
-# This code takes a few minutes to run, but it works.
-# However, the RMSE is larger than the mean (mu)
-# Maybe if we ensemble the RMSE goes down
+               
 library(rpart)
 fit_rpart <- rpart(rating ~ userId + movieId, data = train_set)
 y_hat_rpart = predict(fit_rpart, test_set)
@@ -662,19 +485,12 @@ result <- bind_rows(result,
                            MSE = MSE(test_set$rating, y_hat_rpart),
                            MAE = MAE(test_set$rating, y_hat_rpart)))
 
-# Show the RMSE 
 result %>% knitr::kable()
 
-# Visualize the splits 
-# This plot doesn't provide much information
 plot(fit_rpart, margin = 0.1)
 text(fit_rpart, cex = 0.75)
 
-#------------------
-# 5. K nearest neighours - knn
-#------------------
-# Calculating the knn runs fast, but the prediction
-# runs for a several hours (~8 hours).
+               
 fit_knn <- knn3(rating ~ userId + movieId, data = train_set)
 y_hat_knn <- predict(fit_knn, test_set)
 
@@ -684,20 +500,14 @@ result <- bind_rows(result,
                            MSE = MSE(test_set$rating, y_hat_knn),
                            MAE = MAE(test_set$rating, y_hat_knn)))
 
-# Show the RMSE 
 result %>% knitr::kable()
 
-# The RMSE of knn is very high (3.58), so let's see
-# the reason.
 head(y_hat_knn)
 class(y_hat_knn)
 
 # Knn returned a matrix with the predicted ratings,
-# resulting in this very high RMSE value. Let's pick just one 
-# value and see if we can improve RMSE.
-# The values in the matrix are the probability of each
-# rating, so we can pick the rating with the highest probability (hp).
-ratings <- as.numeric(dimnames(y_hat_knn)[[2]])
+
+               ratings <- as.numeric(dimnames(y_hat_knn)[[2]])
 y_hat_knn_hp <- sapply(1:nrow(y_hat_knn),
                          function(x) ratings[which.max(y_hat_knn[x,])]) 
 
@@ -710,52 +520,17 @@ result <- bind_rows(result,
                            MAE = MAE(test_set$rating, y_hat_knn_hp)))
 
 # Show the RMSE 
-result %>% knitr::kable()
 
-# RMSE improved substantially (dropped to 1.35), but it is still
-# very high. Let's try another method: if we multiply rating 
-# probability with the rating and sum all values, we get a 
-# single value, which is the weighted average (wa).
+
 y_hat_knn_wa <- sapply(1:length(ratings),
                         function(x) ratings[x]*y_hat_knn[,x]) %>% 
                   rowSums()
 
-head(y_hat_knn_wa)
-
-result <- bind_rows(result,
-                    tibble(Method = "Knn weighted average (wa)",
-                           RMSE = RMSE(test_set$rating, y_hat_knn_wa),
-                           MSE = MSE(test_set$rating, y_hat_knn_wa),
-                           MAE = MAE(test_set$rating, y_hat_knn_wa)))
-# Show the RMSE 
-result %>% knitr::kable()
-
-# The RMSE reduced to 1.08, but it's still higher than the mean.
-
-#------------------
-# 6. Dimension reduction (PCA / SVD)
-#------------------
-# The dataset is very large, but there's only 5 predictors.
-# So, dimension reduction won't be very useful here.
-# We used matrix factorization with recosystem that provided
-# better result.
-pca <- prcomp(train_set)
 
 
-################################
-# Ensemble
-################################
-# Now, we have the predicted ratings from 3 different
-# methods: regularization, regression trees and knn.
-# Note: For knn, we have 2 predicted values.
-# Regularization provided the best result (0.8641362). 
-# Let's combine the results of the predictions and
-# see if we can improve the RMSE.
-# We create several combinations of the predicted ratings
-# and pick the one with the lowest RMSE.
 
 
-# Ensemble 1: regularization and recosystem
+
 y_reg_reco <- tibble(regularization = y_hat_reg, 
                      recosys = y_hat_recon) %>% rowMeans()
 
@@ -819,26 +594,6 @@ result <- bind_rows(result,
 # Show the RMSE 
 result %>% knitr::kable()
 
-################################
-# Final validation
-################################
-# As we can see from the result table, regularization and recosystem
-# achieved the lowest RMSE.
-# So, finally we train the complete 'edx' set with the 
-# final model and calculate the RMSE in the 'validation' set.
-
-# recosystem is the best method, followed by linear model with
-# regularization.
-# Recommenderlab crashed the computer.
-# The 'train' function from 'caret' package uses too much memory.
-# knn and rpart aren't as good as LM with regularization.
-# Ensemble methods didn't reduce RMSE.
-# Here, we validate LM with regularzation and recosystem, the 2 winners.
-#
-
-#-----------------
-# Final validation: Linear Model with Regularization.
-#-----------------
 mu_edx <- mean(edx$rating)
 # Movie effect (bi)
 b_i_edx <- edx %>%
